@@ -121,3 +121,8 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# samtools
+*.bt2
+*.bai
+
