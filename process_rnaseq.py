@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import sep_lib as sep
 import pysam
 import sys, os
@@ -20,6 +22,10 @@ if __name__ == '__main__':
                         help="debug mode")
     parser.add_argument('--head', action='store_true',
                         help="run only on annotation head")
+    parser.add_argument('--no_counts', action='store_true',
+                        help="skip counts computation")
+    parser.add_argument('--no_cover', action='store_true',
+                        help="skip counts computation")
 
 
     args = parser.parse_args()
@@ -55,24 +61,26 @@ if __name__ == '__main__':
     ann_df = sep.add_useful_columns_to_annotation_df(ann_df)
 
     if args.head:
-        ann_df = ann_df.head()
+        ann_df = ann_df.tail()
     logging.info(f"opening alignment file {aln_fpath}")
     samfile = pysam.AlignmentFile(aln_fpath, "rb")
     contig = samfile.references[0]
 
-    logging.info(f"computing read counts")
-    count_df = sep.add_read_counts_to_annotation_df(ann_df, samfile, contig)
-    logging.info(f"done computing read counts")
+    if not args.no_counts:
+        logging.info(f"computing read counts")
+        count_df = sep.add_read_counts_to_annotation_df(ann_df, samfile, contig)
+        logging.info(f"done computing read counts")
 
-    logging.info(f"saving to f{counts_csv_fpath}")
-    count_df.to_csv(counts_csv_fpath)
-    logging.info(f"done saving to f{counts_csv_fpath}")
+        logging.info(f"saving to {counts_csv_fpath}")
+        count_df.to_csv(counts_csv_fpath)
+        logging.info(f"done saving to {counts_csv_fpath}")
 
-    logging.info(f"computing read cover")
-    cover_df = sep.create_cover_df(ann_df, samfile, contig)
-    logging.info(f"done computing read cover")
+    if not args.no_cover:
+        logging.info(f"computing read cover")
+        cover_df = sep.create_cover_df(ann_df, samfile, contig)
+        logging.info(f"done computing read cover")
 
-    logging.info(f"saving to f{cover_csv_fpath}")
-    cover_df.to_csv(cover_csv_fpath)
-    logging.info(f"done saving to f{cover_csv_fpath}")
+        logging.info(f"saving to {cover_csv_fpath}")
+        cover_df.to_csv(cover_csv_fpath)
+        logging.info(f"done saving to {cover_csv_fpath}")
 

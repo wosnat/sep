@@ -1,40 +1,18 @@
-import itertools
+#!/usr/bin/env python
+
 import sys, os
 import logging
 from collections import defaultdict
 
-from scipy.special import comb
-from scipy import stats
-import scipy.cluster.hierarchy as hac
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import seaborn as sns
-from sklearn.decomposition import PCA
-from sklearn.manifold import TSNE
-
-from sklearn.preprocessing import StandardScaler
-from matplotlib.colors import ListedColormap
-from mpl_toolkits.mplot3d import Axes3D
-from sklearn.linear_model import LinearRegression
-from sklearn import metrics
-from sklearn.ensemble import RandomForestClassifier
-from matplotlib.lines import Line2D
-import matplotlib.patches as mpatches
-from sklearn.metrics import classification_report, accuracy_score
-#import sklearn.metrics as metrics
-from sklearn.feature_selection import RFECV
-from sklearn.model_selection import StratifiedKFold
-from sklearn.model_selection import StratifiedShuffleSplit
-from sklearn.metrics import auc
-
-from scipy.optimize import least_squares
-from scipy.optimize import curve_fit
-from scipy import stats
 
 import pysam
 
 class RnaAalignedRead:
+    """
+    class describing one read segment (grouping all reads that cover this segment)
+    """
     def __init__(self):
         self.read_start = 0
         self.read_end = 0
@@ -45,6 +23,14 @@ class RnaAalignedRead:
         self.read_count = 0
 
     def add_read(self, read :pysam.AlignedSegment , gene_start:int, gene_end:int, gene_is_reversed:bool):
+        """
+        add a new read to this segment
+        :param read:  pysam.AlignedSegment
+        :param gene_start: int start index beginning of reading frame). 1 based.
+        :param gene_end: int end index (one ater the gene ends). 1 based.
+        :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+        :return: updates self
+        """
         self.read_start = read.reference_start + 1
         self.read_end = read.reference_end
         self.read_is_reverse = read.is_reverse
@@ -96,12 +82,19 @@ class RnaAalignedRead:
 
     @staticmethod
     def read_to_key(read: pysam.AlignedSegment):
+        """
+        :param read: samfile read
+        :return: key for read dict
+        """
         read_start = read.reference_start + 1
         read_end = read.reference_end
         read_is_reverse = read.is_reverse
         return (read_start, read_end, read_is_reverse)
 
     def to_record(self):
+        """
+        :return: current read as dict
+        """
         return {
             'read_start': self.read_start,
             'read_end': self.read_end,
@@ -114,9 +107,11 @@ class RnaAalignedRead:
 
 
     def to_count(self, gene_is_reversed :bool, count_overflow: bool):
-        """ return tuple:
-        number_of_reads, number_of_antisense_reads
-
+        """
+        count number of reads covering this gene
+        :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+        :param count_overflow: whether to add partial cover reads to the count
+        :return:  tuple: number_of_reads, number_of_antisense_reads
         """
         if not count_overflow and self.read_overflow:
             return 0, 0
@@ -127,6 +122,14 @@ class RnaAalignedRead:
 
     def to_cover(self, cover_df: pd.DataFrame,
                 gene_start:int, gene_end:int, gene_is_reversed:bool):
+        """
+        compute cover per nucleotede in the gene
+        :param cover_df: result of this function
+        :param gene_start: int start index beginning of reading frame). 1 based.
+        :param gene_end: int end index (one ater the gene ends). 1 based.
+        :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+        :return: nothing. return by reference of cover_df
+        """
         if (gene_is_reversed == self.read_is_reverse):
             column = 'reads'
         else:
@@ -142,19 +145,29 @@ class RnaReads:
     def __init__(self, samfile: pysam.AlignmentFile, contig: str,
                  gene_start:int, gene_end:int, gene_is_reversed:bool,
                  gene_type:str):
+        """
+        list reads (grouped by start,end, direction
+        :param samfile: handle to pysam samfile
+        :param contig: config name in the samfile
+        :param gene_start: int start index beginning of reading frame). 1 based.
+        :param gene_end: int end index (one ater the gene ends). 1 based.
+        :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+        :param gene_type: type (usually peg, rna)
+        """
         self.reads_dict = defaultdict(RnaAalignedRead)
         self.gene_start = gene_start
         self.gene_end = gene_end
+        if (gene_end is None) or (np.isnan(gene_end)):
+            # last gene in the list
+            self.gene_end = samfile.get_reference_length(contig)
+
         self.gene_type = gene_type
         self.gene_is_reversed = gene_is_reversed
 
         # pysam indexing is 0 based, annotation is 1 based
         samstart = max(0, gene_start - 1)
-        samstop = gene_end
+        samstop = self.gene_end
 
-        if (samstop is None) or (np.isnan(samstop)):
-            # last gene in the list
-            samstop = samfile.get_reference_length()
         if samstop <= samstart:
             return
         for read in samfile.fetch(contig=contig, start=samstart, stop=samstop):
@@ -163,15 +176,27 @@ class RnaReads:
 
 
     def add_read(self,read: pysam.AlignedSegment):
+        """
+        add read to as part of the constructor
+        :param read: pysam read
+        """
         logging.debug(read)
         key = RnaAalignedRead.read_to_key(read)
         self.reads_dict[key].add_read(read, self.gene_start, self.gene_end, self.gene_is_reversed)
 
 
     def get_record_list(self):
+        """
+        :return: a list of grouped reads (list of dicts)
+        """
         return [r.to_record() for r in self.reads_dict.values()]
 
     def get_counts(self, count_overflow: bool):
+        """
+
+        :param count_overflow: should partially covered reads be counted
+        :return: tuple (number of sense reads, number of antisense reads)
+        """
         if not self.reads_dict:
             return  [0, 0]
         else:
@@ -196,7 +221,13 @@ class RnaReads:
             'reads', 'reads_as',
             'overflow_reads', 'overflow_reads_as',
         ]
-        cover_df = pd.DataFrame(index=range(self.gene_start, self.gene_end),
+        start = self.gene_start
+        end = self.gene_end
+        if self.gene_end <= self.gene_start:
+            end = self.gene_start
+
+
+        cover_df = pd.DataFrame(index=range(start, end),
                                 columns=cover_df_columns)
 
         cover_df.loc[:, 'reads'] = 0
@@ -209,6 +240,10 @@ class RnaReads:
         return cover_df
 
     def get_cover_reads(self, is_intergenic:bool):
+        """
+        :param is_intergenic: is this intergenic (region between genes
+        :return: df with number of covered reads per location in the gene
+        """
         cover_df = self._cover_init_df(is_intergenic)
         for r in self.reads_dict.values():
             r.to_cover(cover_df, self.gene_start, self.gene_end, self.gene_is_reversed)
@@ -220,6 +255,16 @@ class RnaReads:
 def reads_per_gene(samfile: pysam.AlignmentFile, contig: str,
                  gene_start:int, gene_end:int, gene_is_reversed:bool,
                  gene_type:str):
+    """
+
+    :param samfile: handle to pysam samfile
+    :param contig: config name in the samfile
+    :param gene_start: int start index beginning of reading frame). 1 based.
+    :param gene_end: int end index (one ater the gene ends). 1 based.
+    :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+    :param gene_type: type (usually peg, rna)
+    :return: list of dicts per grouped read
+    """
     read_dict = RnaReads(samfile, contig, gene_start, gene_end, gene_is_reversed, gene_type)
     return read_dict.get_record_list()
 
@@ -227,6 +272,16 @@ def reads_per_gene(samfile: pysam.AlignmentFile, contig: str,
 def count_reads(samfile: pysam.AlignmentFile, contig: str,
                  gene_start:int, gene_end:int, gene_is_reversed:bool,
                  gene_type:str, count_overflow):
+    """
+    :param samfile: handle to pysam samfile
+    :param contig: config name in the samfile
+    :param gene_start: int start index beginning of reading frame). 1 based.
+    :param gene_end: int end index (one ater the gene ends). 1 based.
+    :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+    :param gene_type: type (usually peg, rna)
+    :param count_overflow: should partially covered reads be counted
+    :return: tuple (number of sense reads, number of antisense reads)
+    """
     read_dict = RnaReads(samfile, contig, gene_start, gene_end, gene_is_reversed, gene_type)
 
     counts = read_dict.get_counts(count_overflow)
@@ -235,6 +290,16 @@ def count_reads(samfile: pysam.AlignmentFile, contig: str,
 def cover_reads(samfile: pysam.AlignmentFile, contig: str,
                  gene_start:int, gene_end:int, gene_is_reversed:bool,
                  gene_type:str, is_intergenic:bool):
+    """
+    :param samfile: handle to pysam samfile
+    :param contig: config name in the samfile
+    :param gene_start: int start index beginning of reading frame). 1 based.
+    :param gene_end: int end index (one ater the gene ends). 1 based.
+    :param gene_is_reversed: bool is the gene on the reverse (antisense) strand
+    :param gene_type: type (usually peg, rna)
+    :param is_intergenic: is this intergenic (region between genes
+    :return: df with number of covered reads per location in the gene
+    """
     read_dict = RnaReads(samfile, contig, gene_start, gene_end, gene_is_reversed, gene_type)
     cover_df = read_dict.get_cover_reads(is_intergenic)
     return cover_df
@@ -242,6 +307,10 @@ def cover_reads(samfile: pysam.AlignmentFile, contig: str,
 
 
 def add_useful_columns_to_annotation_df(ann_df:pd.DataFrame):
+    """
+    :param ann_df: dataframe based on rast annotation file
+    :return: ann_df with additiona fields
+    """
     ann_df['min_idx'] = ann_df[['start', 'stop']].min(axis=1)
     ann_df['max_idx'] = ann_df[['start', 'stop']].max(axis=1)
     ann_df['inter_stop_idx'] = ann_df.min_idx.shift(-1)
@@ -252,6 +321,16 @@ def add_useful_columns_to_annotation_df(ann_df:pd.DataFrame):
     return ann_df
 
 def add_read_counts_to_annotation_df(ann_df:pd.DataFrame, samfile: pysam.AlignmentFile, contig:str):
+    """
+    :param ann_df: dataframe based on rast annotation file. assumes add_useful_columns_to_annotation_df()
+    :param samfile: handle to pysam samfile
+    :param contig: config name in the samfile
+    :return: annotation df with additional fields :
+        reads - reads in the direction of this gene
+        reads_as - reads in the reverse direction
+        reads_inter - reads in the forward direction covering the intergenic region after this gene
+        reads_as_inter - reads in the reverse direction covering the intergenic region after this gene
+    """
     count_func = lambda x: count_reads(samfile, contig,
             x['min_idx'], x['max_idx'], x['gene_is_reversed'], x['type'], count_overflow=True)
     inter_count_func = lambda x: count_reads(samfile, contig,
@@ -265,6 +344,12 @@ def add_read_counts_to_annotation_df(ann_df:pd.DataFrame, samfile: pysam.Alignme
     return df
 
 def create_cover_df(ann_df:pd.DataFrame, samfile: pysam.AlignmentFile, contig:str):
+    """
+    :param ann_df: dataframe based on rast annotation file. assumes add_useful_columns_to_annotation_df()
+    :param samfile: handle to pysam samfile
+    :param contig: config name in the samfile
+    :return: dataframe with row per location in the reference genome
+    """
     cover_func = lambda x: cover_reads(samfile, contig,
                        x.iloc[0]['min_idx'], x.iloc[0]['max_idx'],
                        x.iloc[0]['gene_is_reversed'],

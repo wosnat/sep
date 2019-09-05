@@ -1,0 +1,1 @@
+ ./process_rnaseq.py --ann data/MIT9313.txt --aln data/mit9313_SRR3334787.sorted.bam --o tmp
