@@ -125,4 +125,7 @@ dmypy.json
 # samtools
 *.bt2
 *.bai
+*.bam
 
+# run area
+tmp/
