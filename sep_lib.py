@@ -354,8 +354,14 @@ def create_cover_df(ann_df:pd.DataFrame, samfile: pysam.AlignmentFile, contig:st
                        x.iloc[0]['min_idx'], x.iloc[0]['max_idx'],
                        x.iloc[0]['gene_is_reversed'],
                        x.iloc[0]['type'], is_intergenic=False)
+    inter_cover_func = lambda x: cover_reads(samfile, contig,
+                       x.iloc[0]['max_idx'], x.iloc[0]['inter_stop_idx'],
+                       gene_is_reversed=False,
+                       gene_type='inter', is_intergenic=True)
     group_cols = ['contig_id', 'gene_id', 'type']
     cover_df = ann_df.groupby(group_cols).apply(cover_func)
+    inter_count_df = ann_df.groupby(group_cols).apply(inter_cover_func)
+    cover_df = pd.concat([cover_df, inter_cover_df])
     cover_df.reset_index(inplace=True)
     cover_df.rename(columns={'level_3': 'location'}, inplace=True)
     for c in ['gene_inter', 'peg_sense', 'peg_as', 'rna_sense', 'rna_as', 'reads', 'reads_as']:
