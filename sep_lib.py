@@ -157,6 +157,8 @@ class RnaReads:
         self.reads_dict = defaultdict(RnaAalignedRead)
         self.gene_start = gene_start
         self.gene_end = gene_end
+        if isinstance(gene_end, np.float64):
+            self.gene_end = gene_end.astype(int)
         if (gene_end is None) or (np.isnan(gene_end)):
             # last gene in the list
             self.gene_end = samfile.get_reference_length(contig)
@@ -225,7 +227,6 @@ class RnaReads:
         end = self.gene_end
         if self.gene_end <= self.gene_start:
             end = self.gene_start
-
 
         cover_df = pd.DataFrame(index=range(start, end),
                                 columns=cover_df_columns)
@@ -360,8 +361,8 @@ def create_cover_df(ann_df:pd.DataFrame, samfile: pysam.AlignmentFile, contig:st
                        gene_type='inter', is_intergenic=True)
     group_cols = ['contig_id', 'gene_id', 'type']
     cover_df = ann_df.groupby(group_cols).apply(cover_func)
-    inter_count_df = ann_df.groupby(group_cols).apply(inter_cover_func)
-    cover_df = pd.concat([cover_df, inter_cover_df])
+    inter_cover_df = ann_df.groupby(group_cols).apply(inter_cover_func)
+    cover_df = pd.concat([cover_df, inter_cover_df], sort=False)
     cover_df.reset_index(inplace=True)
     cover_df.rename(columns={'level_3': 'location'}, inplace=True)
     for c in ['gene_inter', 'peg_sense', 'peg_as', 'rna_sense', 'rna_as', 'reads', 'reads_as']:
