@@ -217,7 +217,7 @@ class RnaReads:
 
     def _cover_init_df(self, is_intergenic:bool):
         cover_df_columns = [
-            'gene_inter',
+            'gene_inter', 'inter_sense',
             'peg_sense', 'peg_as',
             'rna_sense', 'rna_as',
             'reads', 'reads_as',
@@ -237,6 +237,7 @@ class RnaReads:
         cover_df.loc[:, 'overflow_reads_as'] = 0
         # mark the gene location
         gene_column = self._cover_select_gene_column(is_intergenic)
+        print (start, end)
         cover_df.loc[:, gene_column] = 1
         return cover_df
 
@@ -378,16 +379,16 @@ if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     ann_df = pd.read_csv('data/MIT9313.txt', sep='\t')
     ann_df = add_useful_columns_to_annotation_df(ann_df)
-    #samfile = pysam.AlignmentFile("data/SRR3334788.sorted.bam", "rb")
-    samfile = pysam.AlignmentFile("data/mit9313_SRR3334787.sorted.bam", "rb")
-    lst = reads_per_gene(samfile, 'BX548175.1', 15, 20, False,'peg')
-    print(len(lst))
-    print(sum(r['read_count'] for r in lst))
-    pprint.pprint(lst)
+    samfile = pysam.AlignmentFile("data/SRR3334788.sorted.bam", "rb")
+    #samfile = pysam.AlignmentFile("data/mit9313_SRR3334787.sorted.bam", "rb")
+    #lst = reads_per_gene(samfile, 'BX548175.1', 15, 20, False,'peg')
+    #print(len(lst))
+    #print(sum(r['read_count'] for r in lst))
+    #pprint.pprint(lst)
 
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=True, count_overflow=True))
-    print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, gene_type='peg' ,count_overflow=True))
+    #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, gene_type='peg' ,count_overflow=True))
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, count_overflow=False))
 
-    cover_df = cover_reads(samfile, 'BX548175.1', 15, 25, False, 'peg', False)
+    cover_df = cover_reads(samfile, 'BX548175.1', 15, 16, False, 'peg', False)
     print(cover_df)
