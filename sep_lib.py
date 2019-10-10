@@ -208,7 +208,7 @@ class RnaReads:
 
     def _cover_select_gene_column(self, is_intergenic:bool):
         if is_intergenic:
-            gene_column = 'gene_inter'
+            gene_column = 'inter_sense'
         if not self.gene_is_reversed:
             gene_column = f'{self.gene_type}_sense'
         else:
@@ -216,8 +216,9 @@ class RnaReads:
         return gene_column
 
     def _cover_init_df(self, is_intergenic:bool):
+
         cover_df_columns = [
-            'gene_inter', 'inter_sense',
+            'inter_sense', 
             'peg_sense', 'peg_as',
             'rna_sense', 'rna_as',
             'reads', 'reads_as',
@@ -230,14 +231,11 @@ class RnaReads:
 
         cover_df = pd.DataFrame(index=range(start, end),
                                 columns=cover_df_columns)
-
-        cover_df.loc[:, 'reads'] = 0
-        cover_df.loc[:, 'reads_as'] = 0
-        cover_df.loc[:, 'overflow_reads'] = 0
-        cover_df.loc[:, 'overflow_reads_as'] = 0
+        for c in cover_df_columns:
+            cover_df.loc[:, c] = 0
         # mark the gene location
         gene_column = self._cover_select_gene_column(is_intergenic)
-        print (start, end)
+        print (gene_column, start, end)
         cover_df.loc[:, gene_column] = 1
         return cover_df
 
@@ -247,8 +245,12 @@ class RnaReads:
         :return: df with number of covered reads per location in the gene
         """
         cover_df = self._cover_init_df(is_intergenic)
+        if is_intergenic:
+            is_reversed = False
+        else:
+            is_reversed = self.gene_is_reversed
         for r in self.reads_dict.values():
-            r.to_cover(cover_df, self.gene_start, self.gene_end, self.gene_is_reversed)
+            r.to_cover(cover_df, self.gene_start, self.gene_end, is_reversed)
         return cover_df
 
 
@@ -360,14 +362,14 @@ def create_cover_df(ann_df:pd.DataFrame, samfile: pysam.AlignmentFile, contig:st
                        x.iloc[0]['max_idx'], x.iloc[0]['inter_stop_idx'],
                        gene_is_reversed=False,
                        gene_type='inter', is_intergenic=True)
-    group_cols = ['contig_id', 'gene_id', 'type']
+    group_cols = ['contig_id', 'location', 'type']
     cover_df = ann_df.groupby(group_cols).apply(cover_func)
     inter_cover_df = ann_df.groupby(group_cols).apply(inter_cover_func)
     cover_df = pd.concat([cover_df, inter_cover_df], sort=False)
     cover_df.reset_index(inplace=True)
-    cover_df.rename(columns={'level_3': 'location'}, inplace=True)
-    for c in ['gene_inter', 'peg_sense', 'peg_as', 'rna_sense', 'rna_as', 'reads', 'reads_as']:
-        cover_df.loc[:,c] = pd.to_numeric(cover_df[c])
+    cover_df.rename(columns={'level_3': 'x'}, inplace=True)
+    #for c in ['inter_sense', 'peg_sense', 'peg_as', 'rna_sense', 'rna_as', 'reads', 'reads_as']:
+    #    cover_df.loc[:,c] = pd.to_numeric(cover_df[c])
 
 
     return cover_df
@@ -379,7 +381,10 @@ if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     ann_df = pd.read_csv('data/MIT9313.txt', sep='\t')
     ann_df = add_useful_columns_to_annotation_df(ann_df)
+    #small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_1600']
+    small_ann_df = ann_df.loc[ann_df.function == '5S RNA']
     samfile = pysam.AlignmentFile("data/SRR3334788.sorted.bam", "rb")
+    contig = 'BX548175.1'
     #samfile = pysam.AlignmentFile("data/mit9313_SRR3334787.sorted.bam", "rb")
     #lst = reads_per_gene(samfile, 'BX548175.1', 15, 20, False,'peg')
     #print(len(lst))
@@ -389,6 +394,8 @@ if __name__ == '__main__':
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=True, count_overflow=True))
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, gene_type='peg' ,count_overflow=True))
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, count_overflow=False))
+    cover_df = create_cover_df(small_ann_df, samfile, contig)
+    print(cover_df.head())
 
-    cover_df = cover_reads(samfile, 'BX548175.1', 15, 16, False, 'peg', False)
+
     print(cover_df)
