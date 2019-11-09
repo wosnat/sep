@@ -113,12 +113,22 @@ class RnaAalignedRead:
         :param count_overflow: whether to add partial cover reads to the count
         :return:  tuple: number_of_reads, number_of_antisense_reads
         """
+        res = 0, 0
         if not count_overflow and self.read_overflow:
-            return 0, 0
+            res = 0, 0
         if self.read_is_reverse == gene_is_reversed:
-            return self.read_count, 0
+            res = self.read_count, 0
         else:
-            return 0, self.read_count
+            res = 0, self.read_count
+        print( self.read_start,
+             self.read_end,
+             self.read_is_reverse,
+             self.read_count,
+             self.read_overflow,
+            res
+        )
+        return res
+
 
     def to_cover(self, cover_df: pd.DataFrame,
                 gene_start:int, gene_end:int, gene_is_reversed:bool):
@@ -287,6 +297,7 @@ def count_reads(samfile: pysam.AlignmentFile, contig: str,
     :return: tuple (number of sense reads, number of antisense reads)
     """
     read_dict = RnaReads(samfile, contig, gene_start, gene_end, gene_is_reversed, gene_type)
+    pprint.pprint(read_dict.reads_dict)
 
     counts = read_dict.get_counts(count_overflow)
     return pd.Series({'reads': counts[0], 'as_reads': counts[1]})
@@ -341,8 +352,8 @@ def add_read_counts_to_annotation_df(ann_df:pd.DataFrame, samfile: pysam.Alignme
              x['max_idx'], x['inter_stop_idx'],
              gene_is_reversed=False, gene_type='intergenic', count_overflow=False)
 
-    count_df = ann_df.apply(count_func, axis=1)
-    inter_count_df = ann_df.apply(inter_count_func, axis=1)
+    count_df = ann_df.apply(count_func, axis=1, result_type='expand')
+    inter_count_df = ann_df.apply(inter_count_func, axis=1, result_type='expand')
     df = ann_df.join(count_df)
     df = df.join(inter_count_df, rsuffix='_inter')
     return df
@@ -381,8 +392,8 @@ if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     ann_df = pd.read_csv('data/MIT9313.txt', sep='\t')
     ann_df = add_useful_columns_to_annotation_df(ann_df)
-    #small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_1600']
-    small_ann_df = ann_df.loc[ann_df.function == '5S RNA']
+    small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_1600']
+    #small_ann_df = ann_df.loc[ann_df.location == 'MIT9313_1270781_1272178']
     samfile = pysam.AlignmentFile("data/SRR3334788.sorted.bam", "rb")
     contig = 'BX548175.1'
     #samfile = pysam.AlignmentFile("data/mit9313_SRR3334787.sorted.bam", "rb")
@@ -394,8 +405,9 @@ if __name__ == '__main__':
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=True, count_overflow=True))
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, gene_type='peg' ,count_overflow=True))
     #print(count_reads(samfile, 'BX548175.1', 15, 20, gene_is_reversed=False, count_overflow=False))
-    cover_df = create_cover_df(small_ann_df, samfile, contig)
-    print(cover_df.head())
+    #cover_df = create_cover_df(small_ann_df, samfile, contig)
+    cover_df = add_read_counts_to_annotation_df(small_ann_df, samfile, contig)
+    #print(cover_df.head())
 
 
     print(cover_df)
