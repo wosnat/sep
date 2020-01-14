@@ -23,16 +23,19 @@ import pandas as pd
 # https://www.ebi.ac.uk/Tools/services/rest/iprscan5/result/iprscan5-S20190707-131508-0462-76111813-p1m/json
 
 
+module_fpath = os.path.dirname(__file__)
+
 def run_orffinder(accession, minimum_length='1',
-                  dna_code='11', atg_only=True):
+                  dna_code='11', atg_only=True, out_dpath=None):
     """
     run orffinder utility to find all ORFs. Return the name of the file
     Only works in linux (orffinder is linux only program)
     """
     
     cwd = os.getcwd()
-    orffinder_exe = os.path.join(cwd, 'bin','ORFfinder')
-    out_dpath = os.path.join(cwd,'orffinder_tmp')
+    orffinder_exe = os.path.join(module_fpath, 'bin','ORFfinder')
+    if out_dpath is None:
+        out_dpath = os.path.join(cwd,'orffinder_tmp')
     out_fpath = os.path.join(out_dpath, f'{accession}.orffinder.fa')
     
     
@@ -118,22 +121,22 @@ def parse_orffinder_fasta(orf_fpath):
     df['rast_right'] = df['right'] + 1
     return df
     
-def list_orfs(accession, minimum_length='1000'):
+def list_orfs(accession, minimum_length='1000', out_dpath= None):
     """ given accession and minimum ORF length, run orf finder and return a data frame with list of orfs"""
-    orf_fpath = run_orffinder(accession, minimum_length=minimum_length)
+    orf_fpath = run_orffinder(accession, minimum_length=minimum_length, out_dpath=out_dpath)
     return parse_orffinder_fasta(orf_fpath)
 
 def load_genome(genome):
     """ load the genome of a given genome name. return dataframe """
-    genomes_dpath = os.path.join('.', 'data', 
+    genomes_dpath = os.path.join(module_fpath, 'data',
                                  'detailed_Prochlorococcus_genome_annotations')
     fname = f'{genome}.txt'
     df = pd.read_csv(os.path.join(genomes_dpath, fname), sep='\t')
     df['genome'] = os.path.basename(os.path.splitext(fname)[0])
-    df['left'] = gdf['start']
-    df['right'] = gdf['stop']
-    df.loc[gdf.strand == '-', 'left']  = df.loc[gdf.strand == '-', 'stop']
-    df.loc[gdf.strand == '-', 'right'] = df.loc[gdf.strand == '-', 'start']
+    df['left'] = df['start']
+    df['right'] = df['stop']
+    df.loc[df.strand == '-', 'left']  = df.loc[df.strand == '-', 'stop']
+    df.loc[df.strand == '-', 'right'] = df.loc[df.strand == '-', 'start']
 
     return df
 
@@ -143,13 +146,72 @@ def add_gene_annotation_to_sorf_df(sorf_df, genome_df):
     TODO: handle contigs
      """
     # TODO handle contigs
-    df_merge = sorf_df.merge(right=genome_df, how='left',
-         left_on=['rast_left', 'rast_right'],
-         right_on=['left', 'right'],
-         suffixes=['','_rast']
-        )
+    merge_cols = ['contig_id', 'gene_id', 'type', 'start', 'stop', 'strand',
+                  'function', 'figfam',
+                  'nucleotide_sequence', 'aa_sequence', 'genome', 'left', 'right']
+
+    df_merge = sorf_df.merge(right=genome_df.loc[:, merge_cols], how='left',
+                        left_on=['rast_left', 'rast_right', 'strand'],
+                        right_on=['left', 'right', 'strand'],
+                        suffixes=['', '_rast']
+                        )
     return df_merge
 
+
+def _gene_to_loclist(x):
+    d = pd.Series(index=range(x.left, x.right + 1), data=x.gene_id)
+    return d
+def _find_overlapping_gene_id(x, list_df):
+    ids = list_df.loc[(list_df.index >= x.rast_left) & (list_df.index <= x.rast_right)].unique()
+    if len(ids) == 0:
+        return np.NaN
+    return ids
+
+def add_overlapping_genes(sorf_df, genome_df):
+    """ add cverlapping genes to df"""
+    l = [_gene_to_loclist(x) for x in genome_df[['left', 'right', 'gene_id']].itertuples()]
+    list_df = pd.concat(l)
+    sorf_df['overlapping_gene_id'] = sorf_df.apply(
+        lambda x : _find_overlapping_gene_id(x, list_df),
+        axis=1)
+    return sorf_df
+
+def add_overlap_type(df):
+    df.loc[(~df.genome.isna()), 'overlap_type'] = 'known'
+    df.loc[(df.overlap_type.isna()) & (~df.overlapping_gene_id.isna()), 'overlap_type'] = 'overlap'
+    df.loc[(df.overlap_type.isna()), 'overlap_type'] = 'independent'
+    return df
+
+def compute_overlap_type(x):
+    if x['genome'] is not np.NaN:
+        overlap_type = 'known'
+    elif x['overlapping_gene_id'] is not np.NaN:
+        overlap_type = 'overlaps'
+    else:
+        overlap_type = 'independent'
+    return overlap_type
+
+
+def find_and_annotate_sorf(genome, accession, minimum_length='1000', out_dpath= None):
+    """ find all ORFs, and add gene overlap info from the genome
+    :return df with the data
+    """
+    df = list_orfs(accession, minimum_length, out_dpath)
+    gdf = load_genome(genome)
+    df = add_gene_annotation_to_sorf_df(df, gdf)
+    df = add_overlapping_genes(df, gdf)
+    df = add_overlap_type(df)
+    return df
+
+
+def get_accession(genome):
+    metadf1 = pd.read_excel(os.path.join(module_fpath, 'data', 'metadata_pro_biller.xlsx'), sheet_name='Sheet1')
+    metadf2 = pd.read_excel(os.path.join(module_fpath, 'data', 'metadata_pro_biller.xlsx'), sheet_name='Sheet2')
+    accession_list = metadf1.loc[metadf1.Name == genome, 'NCBI accession'].unique()
+    if len(accession_list) == 0:
+        accession_list = metadf2.loc[metadf2.Strain == genome, 'NCBI accession'].unique()
+    assert len(accession_list) == 1
+    return accession_list[0]
 
 if __name__ == '__main__':
     # tests
