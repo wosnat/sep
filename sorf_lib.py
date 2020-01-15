@@ -207,11 +207,11 @@ def _analyze_overlap(x, overlap_genes):
                                              out_of_frame_str ]))
                         
         result = {
-            'is_same_strand': is_same_strand,
-            'is_out_of_frame': is_out_of_frame,
-            'is_inside': is_inside,
-            'is_upstream': is_upstream,
-            'is_downstream': is_downstream,
+            'is_same_strand': int(is_same_strand),
+            'is_out_of_frame': int(is_out_of_frame),
+            'is_inside': int(is_inside),
+            'is_upstream': int(is_upstream),
+            'is_downstream': int(is_downstream),
             'overlap_type' : overlap_type,
         }
     return result
