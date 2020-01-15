@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import itertools
 import sys, os
 import subprocess
@@ -12,7 +14,7 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Find and Annotate sORFs')
     parser.add_argument('--genome', required=True,
                         help='name of the genome')
-    parser.add_argument('--minimum_length', default=10,
+    parser.add_argument('--minimum_length', default='10',
                         help='minimum length per ORF')
 
     parser.add_argument('--out', default='.',
@@ -20,8 +22,8 @@ if __name__ == '__main__':
     args = parser.parse_args()
     os.makedirs(args.out, exist_ok=True)
 
-    accession = sf.get_accession(genome)
-    df = find_and_annotate_sorf(genome, accession,
+    accession = sf.get_accession(args.genome)
+    df = sf.find_and_annotate_sorf(args.genome, accession,
                                 minimum_length=args.minimum_length, out_dpath= args.out)
-    df.to_feather(os.path.join(args.out, f'{genome}.sorf.feather.gz'))
+    df.to_feather(os.path.join(args.out, f'{args.genome}.sorf.feather.gz'))
 

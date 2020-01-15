@@ -165,7 +165,7 @@ def _find_overlapping_gene_id(x, list_df):
     ids = list_df.loc[(list_df.index >= x.rast_left) & (list_df.index <= x.rast_right)].unique()
     if len(ids) == 0:
         return np.NaN
-    return ids
+    return ','.join(list(map(str, ids)))
 
 def add_overlapping_genes(sorf_df, genome_df):
     """ add cverlapping genes to df"""
