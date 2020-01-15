@@ -146,51 +146,101 @@ def add_gene_annotation_to_sorf_df(sorf_df, genome_df):
     TODO: handle contigs
      """
     # TODO handle contigs
-    merge_cols = ['contig_id', 'gene_id', 'type', 'start', 'stop', 'strand',
+    merge_cols = ['contig_id', 'gene_id', 'location', 'type', 
+                  'start', 'stop', 'strand',
                   'function', 'figfam',
                   'nucleotide_sequence', 'aa_sequence', 'genome', 'left', 'right']
 
     df_merge = sorf_df.merge(right=genome_df.loc[:, merge_cols], how='left',
                         left_on=['rast_left', 'rast_right', 'strand'],
                         right_on=['left', 'right', 'strand'],
-                        suffixes=['', '_rast']
+                        suffixes=['', '_r']
                         )
     return df_merge
 
 
 def _gene_to_loclist(x):
-    d = pd.Series(index=range(x.left, x.right + 1), data=x.gene_id)
+    data = {
+        'location' :x.location,
+        'strand' :x.strand,
+    }
+    d = pd.DataFrame(index=range(x.left, x.right + 1), data=data)
     return d
-def _find_overlapping_gene_id(x, list_df):
-    ids = list_df.loc[(list_df.index >= x.rast_left) & (list_df.index <= x.rast_right)].unique()
-    if len(ids) == 0:
-        return np.NaN
-    return ','.join(list(map(str, ids)))
+
+def _analyze_overlap(x, overlap_genes):
+    """ analyze the overlap between sorf and known genes
+    """
+    
+    if (overlap_genes.shape[0] == 0):
+        result =  { 
+            'overlap_type' : 'standalone'
+        }
+    elif not pd.isna(x['location']):
+        result =  { 
+            'overlap_type' : 'known'
+        }
+    elif (overlap_genes.shape[0] > 1):
+        result =  { 
+            'overlap_type' : 'overlap_many'
+        }
+    else:
+        # exactly one overlap and not the same as the orf
+        y = overlap_genes.squeeze()
+        # y should be a series - one found
+        is_same_strand = (x.strand == y.strand)
+        is_out_of_frame = ((x.start+1 - y.start) %3) != 0
+        is_inside = (x.rast_left >= y.left) and (x.rast_right <= y.right)
+        is_upstream = (is_same_strand and 
+                       ((x.strand == '+' and (x.start+1 < y.start)) or
+                        (x.strand == '-' and (x.start+1 > y.start))))
+        is_downstream = (is_same_strand and 
+                       ((x.strand == '+' and (x.stop+1 > y.stop)) or
+                        (x.strand == '-' and (x.stop+1 < y.stop))))
+        
+        out_of_frame_str = 'out_frame' if is_out_of_frame else None
+        same_strand_str = 'as' if not is_same_strand else None
+        inside_str = 'internal' if is_inside else None
+        upstream_str = 'upstream' if is_upstream else None
+        downstream_str = 'downstream' if is_downstream else None
+        overlap_type = '_'.join(filter(None,[same_strand_str, 
+                                             inside_str, downstream_str, upstream_str, 
+                                             out_of_frame_str ]))
+                        
+        result = {
+            'is_same_strand': is_same_strand,
+            'is_out_of_frame': is_out_of_frame,
+            'is_inside': is_inside,
+            'is_upstream': is_upstream,
+            'is_downstream': is_downstream,
+            'overlap_type' : overlap_type,
+        }
+    return result
+
+def _to_str(df, col):
+    return ','.join(map(str, df[col].unique()))
+
+def _find_overlaps(x, list_df, genome_df):
+    subset_df = list_df.loc[(list_df.index >= x.rast_left) & (list_df.index <= x.rast_right)]
+    overlap_ids = subset_df['location'].unique()
+    overlap_genes = genome_df.loc[genome_df['location'].isin(overlap_ids)]
+    result = {
+        'overlap_location': _to_str(overlap_genes, 'location'), 
+        'overlap_strand':   _to_str(overlap_genes, 'strand'), 
+        'overlap_gene_type':     _to_str(overlap_genes, 'type'), 
+        'overlap_count':    overlap_genes.shape[0]
+    }
+    result.update(_analyze_overlap(x, overlap_genes))
+    return result
+    
 
 def add_overlapping_genes(sorf_df, genome_df):
     """ add cverlapping genes to df"""
-    l = [_gene_to_loclist(x) for x in genome_df[['left', 'right', 'gene_id']].itertuples()]
+    l = [_gene_to_loclist(x) for x in genome_df[['left', 'right', 'location', 'strand']].itertuples()]
     list_df = pd.concat(l)
-    sorf_df['overlapping_gene_id'] = sorf_df.apply(
-        lambda x : _find_overlapping_gene_id(x, list_df),
-        axis=1)
-    return sorf_df
-
-def add_overlap_type(df):
-    df.loc[(~df.genome.isna()), 'overlap_type'] = 'known'
-    df.loc[(df.overlap_type.isna()) & (~df.overlapping_gene_id.isna()), 'overlap_type'] = 'overlap'
-    df.loc[(df.overlap_type.isna()), 'overlap_type'] = 'independent'
-    return df
-
-def compute_overlap_type(x):
-    if x['genome'] is not np.NaN:
-        overlap_type = 'known'
-    elif x['overlapping_gene_id'] is not np.NaN:
-        overlap_type = 'overlaps'
-    else:
-        overlap_type = 'independent'
-    return overlap_type
-
+    overlap_df = sorf_df.apply(
+        lambda x : _find_overlaps(x, list_df, genome_df),
+        axis=1, result_type='expand')
+    return sorf_df.join(overlap_df, rsuffix='_')
 
 def find_and_annotate_sorf(genome, accession, minimum_length='1000', out_dpath= None):
     """ find all ORFs, and add gene overlap info from the genome
@@ -200,7 +250,6 @@ def find_and_annotate_sorf(genome, accession, minimum_length='1000', out_dpath= 
     gdf = load_genome(genome)
     df = add_gene_annotation_to_sorf_df(df, gdf)
     df = add_overlapping_genes(df, gdf)
-    df = add_overlap_type(df)
     return df
 
 
