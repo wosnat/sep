@@ -173,15 +173,18 @@ def _analyze_overlap(x, overlap_genes):
     
     if (overlap_genes.shape[0] == 0):
         result =  { 
-            'overlap_type' : 'standalone'
+            'overlap_type' : 'standalone',
+            'otype' : 'standalone',
         }
     elif not pd.isna(x['location']):
         result =  { 
-            'overlap_type' : 'known'
+            'overlap_type' : 'known',
+            'otype' : 'known',
         }
     elif (overlap_genes.shape[0] > 1):
         result =  { 
-            'overlap_type' : 'overlap_many'
+            'overlap_type' : 'overlap_many',
+            'otype' : 'overlap',
         }
     else:
         # exactly one overlap and not the same as the orf
@@ -205,6 +208,13 @@ def _analyze_overlap(x, overlap_genes):
         overlap_type = '_'.join(filter(None,[same_strand_str, 
                                              inside_str, downstream_str, upstream_str, 
                                              out_of_frame_str ]))
+        if not is_same_strand:
+            overlap_type_short = 'antisense'
+        elif is_out_of_frame:
+            overlap_type_short = 'out_frame'
+        else:
+            overlap_type_short = 'in_frame'
+
                         
         result = {
             'is_same_strand': int(is_same_strand),
@@ -213,6 +223,7 @@ def _analyze_overlap(x, overlap_genes):
             'is_upstream': int(is_upstream),
             'is_downstream': int(is_downstream),
             'overlap_type' : overlap_type,
+            'otype':         overlap_type_short, 
         }
     return result
 
@@ -242,12 +253,29 @@ def add_overlapping_genes(sorf_df, genome_df):
         axis=1, result_type='expand')
     return sorf_df.join(overlap_df, rsuffix='_')
 
+def gen_summary_df(df, genome):
+    d1 = df.groupby(['otype'])['orfid'].count().reset_index()
+    d2 = df.loc[df.len_aa < 100].groupby(['otype'])['orfid'].count().reset_index()
+    d3 = df.loc[df.len_aa < 50].groupby(['otype'])['orfid'].count().reset_index()
+    d1['subset'] = 'all'
+    d1.rename(columns={'orfid':'count'}, inplace=True)
+    d2['subset'] = '<100aa'
+    d2.rename(columns={'orfid':'count'}, inplace=True)
+    d3['subset'] = '<50aa'
+    d3.rename(columns={'orfid':'count'}, inplace=True)
+    res_df = pd.concat([d1,d2,d3])
+    res_df['genome'] = genome
+    res_df.reset_index(inplace=True)
+    return res_df
+
+
 def find_and_annotate_sorf(genome, accession, minimum_length='1000', out_dpath= None):
     """ find all ORFs, and add gene overlap info from the genome
     :return df with the data
     """
-    df = list_orfs(accession, minimum_length, out_dpath)
     gdf = load_genome(genome)
+    assert gdf['contig_id'].nunique() == 1, 'more than one contig found'
+    df = list_orfs(accession, minimum_length, out_dpath)
     df = add_gene_annotation_to_sorf_df(df, gdf)
     df = add_overlapping_genes(df, gdf)
     return df

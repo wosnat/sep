@@ -25,5 +25,7 @@ if __name__ == '__main__':
     accession = sf.get_accession(args.genome)
     df = sf.find_and_annotate_sorf(args.genome, accession,
                                 minimum_length=args.minimum_length, out_dpath= args.out)
+    summary_df = sf.gen_summary_df(df, args.genome)
     df.to_feather(os.path.join(args.out, f'{args.genome}.sorf.feather.gz'))
+    summary_df.to_csv(os.path.join(args.out, f'{args.genome}.sorf.summary.csv.gz'))
 
