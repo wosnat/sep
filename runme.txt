@@ -1,0 +1,1 @@
+for i in $(cat genome_list.txt) ; do echo $i; done
