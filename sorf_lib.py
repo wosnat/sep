@@ -64,7 +64,7 @@ def _parse_orf_name(name):
     """ parse line in orffinder output fasta (header of entry) """
     n=name.split()[0]
     n=n.split('|')[1]
-    geneid, start, stop = n.split(':')
+    geneid, start, stop = n.rsplit(':', maxsplit=2)
     contig = geneid.split('_', 2)[1]
     start = int(start)
     stop = int(stop)
