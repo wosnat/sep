@@ -1,0 +1,5 @@
+for i in $(cat genome_list.txt) ; do echo $i; done
+
+
+for i in $(cat data/genome_list.txt); do ./find_sorf.py --genome $i --out orffinder_tmp/ ; done
+
