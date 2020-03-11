@@ -120,12 +120,8 @@ class RnaAalignedRead:
             res = self.read_count, 0
         else:
             res = 0, self.read_count
-        print( self.read_start,
-             self.read_end,
-             self.read_is_reverse,
-             self.read_count,
-             self.read_overflow,
-            res
+        print( f' start {self.read_start}, end {self.read_end}, read_reverse {self.read_is_reverse}, gene_reverse {gene_is_reversed}, \
+             count {self.read_count}, overflow {self.read_overflow}, res {res}'
         )
         return res
 
@@ -192,6 +188,7 @@ class RnaReads:
         add read to as part of the constructor
         :param read: pysam read
         """
+        print(read)
         logging.debug(read)
         key = RnaAalignedRead.read_to_key(read)
         self.reads_dict[key].add_read(read, self.gene_start, self.gene_end, self.gene_is_reversed)
@@ -392,7 +389,8 @@ if __name__ == '__main__':
     pd.set_option('display.max_columns', 500)
     ann_df = pd.read_csv('data/MIT9313.txt', sep='\t')
     ann_df = add_useful_columns_to_annotation_df(ann_df)
-    small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_1600']
+    #small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_1600']
+    small_ann_df = ann_df.loc[ann_df.gene_id == 'PMIT9313_0202']
     #small_ann_df = ann_df.loc[ann_df.location == 'MIT9313_1270781_1272178']
     samfile = pysam.AlignmentFile("data/SRR3334788.sorted.bam", "rb")
     contig = 'BX548175.1'
