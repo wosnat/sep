@@ -130,3 +130,4 @@ dmypy.json
 # run area
 tmp/
 *.bak
+*.raw
