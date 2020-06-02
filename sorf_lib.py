@@ -191,7 +191,12 @@ def _analyze_overlap(x, overlap_genes):
         y = overlap_genes.squeeze()
         # y should be a series - one found
         is_same_strand = (x.strand == y.strand)
-        is_out_of_frame = ((x.start+1 - y.start) %3) != 0
+        is_out_of_frame = ((((x.start+1 - y.start) %3) != 0) and 
+                       ((x.strand == '+' and (x.rast_right != y.right)) or
+                        (x.strand == '-' and (x.rast_left != y.left))))
+        if (y['aa_sequence'].endswith(x['aaseq'])):
+            is_out_of_frame = False
+
         is_inside = (x.rast_left >= y.left) and (x.rast_right <= y.right)
         is_upstream = (is_same_strand and 
                        ((x.strand == '+' and (x.start+1 < y.start)) or
